@@ -1,0 +1,472 @@
+# AI Insights Dashboard - Development Environment
+# ================================================
+#
+# Complete containerized development environment with:
+# - PostgreSQL with TimescaleDB extension
+# - Redis for caching and session management
+# - FastAPI backend with hot reload
+# - React frontend with development server
+# - Monitoring and observability tools
+#
+# Usage:
+#   docker-compose up -d          # Start all services
+#   docker-compose logs -f api    # View API logs
+#   docker-compose down           # Stop all services
+#   docker-compose down -v        # Stop and remove volumes
+#
+# Author: AI Insights Team
+# Version: 1.0.0
+
+version: '3.8'
+
+# =============================================================================
+# SERVICES CONFIGURATION
+# =============================================================================
+services:
+  
+  # PostgreSQL Database with TimescaleDB
+  # ----------------------------------
+  postgres:
+    image: timescale/timescaledb:2.11.2-pg15
+    container_name: ai_insights_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_insights
+      POSTGRES_USER: ai_insights_user
+      POSTGRES_PASSWORD: ai_insights_password_dev
+      POSTGRES_HOST_AUTH_METHOD: trust
+      TIMESCALEDB_TELEMETRY: 'off'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - ai_insights_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_insights_user -d ai_insights"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres -c log_statement=all
+               -c log_destination=stderr
+               -c logging_collector=on
+               -c max_connections=100
+               -c shared_buffers=256MB
+               -c effective_cache_size=1GB
+               -c work_mem=4MB
+               -c maintenance_work_mem=64MB
+
+  # Redis Cache and Session Store
+  # ----------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: ai_insights_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - ai_insights_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend Application
+  # --------------------------
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      args:
+        - PYTHON_VERSION=3.11
+    container_name: ai_insights_api
+    restart: unless-stopped
+    environment:
+      # Database Configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=ai_insights
+      - DB_USER=ai_insights_user
+      - DB_PASSWORD=ai_insights_password_dev
+      - DB_SSL_MODE=disable
+      
+      # Redis Configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      
+      # Application Configuration
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - SECRET_KEY=development_secret_key_change_in_production
+      - ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      
+      # External API Keys (set these in .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_key_here}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-your_anthropic_key_here}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-your_perplexity_key_here}
+      
+      # Monitoring
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./backend:/app
+      - api_static:/app/static
+    ports:
+      - "8000:8000"
+    networks:
+      - ai_insights_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        python -c 'import time; time.sleep(10)' &&
+        echo 'Running database migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting FastAPI development server...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+      "
+
+  # React Frontend Application
+  # -------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+      args:
+        - NODE_VERSION=18
+    container_name: ai_insights_frontend
+    restart: unless-stopped
+    environment:
+      - REACT_APP_API_BASE_URL=http://localhost:8000
+      - REACT_APP_ENVIRONMENT=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    networks:
+      - ai_insights_network
+    depends_on:
+      - api
+    command: npm start
+
+  # Nginx Reverse Proxy (Development)
+  # ---------------------------------
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: ai_insights_nginx
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - api_static:/var/www/static:ro
+    ports:
+      - "80:80"
+    networks:
+      - ai_insights_network
+    depends_on:
+      - api
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Development Tools and Monitoring
+  # -------------------------------
+  
+  # PostgreSQL Admin Interface
+  pgadmin:
+    image: dpage/pgadmin4:7.8
+    container_name: ai_insights_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@aiinsights.dev
+      PGADMIN_DEFAULT_PASSWORD: admin_password_dev
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    networks:
+      - ai_insights_network
+    depends_on:
+      - postgres
+
+  # Redis Admin Interface
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ai_insights_redis_commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin_password_dev
+    ports:
+      - "8081:8081"
+    networks:
+      - ai_insights_network
+    depends_on:
+      - redis
+
+  # Prometheus Metrics Collection
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    container_name: ai_insights_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    networks:
+      - ai_insights_network
+    depends_on:
+      - api
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: ai_insights_grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin_password_dev
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - ai_insights_network
+    depends_on:
+      - prometheus
+
+  # Log Aggregation
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: ai_insights_loki
+    restart: unless-stopped
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - ai_insights_network
+
+  # Log Collection Agent
+  promtail:
+    image: grafana/promtail:2.9.2
+    container_name: ai_insights_promtail
+    restart: unless-stopped
+    volumes:
+      - ./docker/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - ai_insights_network
+    depends_on:
+      - loki
+
+# =============================================================================
+# VOLUMES CONFIGURATION
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+    name: ai_insights_postgres_data
+  
+  redis_data:
+    driver: local
+    name: ai_insights_redis_data
+  
+  api_static:
+    driver: local
+    name: ai_insights_api_static
+  
+  pgadmin_data:
+    driver: local
+    name: ai_insights_pgadmin_data
+  
+  prometheus_data:
+    driver: local
+    name: ai_insights_prometheus_data
+  
+  grafana_data:
+    driver: local
+    name: ai_insights_grafana_data
+  
+  loki_data:
+    driver: local
+    name: ai_insights_loki_data
+
+# =============================================================================
+# NETWORKS CONFIGURATION
+# =============================================================================
+networks:
+  ai_insights_network:
+    driver: bridge
+    name: ai_insights_network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+# =============================================================================
+# DEVELOPMENT SERVICES (Optional)
+# =============================================================================
+# Uncomment the following services for additional development tools
+
+#   # Mailhog for email testing
+#   mailhog:
+#     image: mailhog/mailhog:v1.0.1
+#     container_name: ai_insights_mailhog
+#     restart: unless-stopped
+#     ports:
+#       - "1025:1025"  # SMTP server
+#       - "8025:8025"  # Web interface
+#     networks:
+#       - ai_insights_network
+
+#   # Jaeger for distributed tracing
+#   jaeger:
+#     image: jaegertracing/all-in-one:1.49
+#     container_name: ai_insights_jaeger
+#     restart: unless-stopped
+#     environment:
+#       - COLLECTOR_OTLP_ENABLED=true
+#     ports:
+#       - "16686:16686"  # Web interface
+#       - "14268:14268"  # HTTP collector
+#     networks:
+#       - ai_insights_network
+
+#   # Elasticsearch for log analysis
+#   elasticsearch:
+#     image: docker.elastic.co/elasticsearch/elasticsearch:8.10.4
+#     container_name: ai_insights_elasticsearch
+#     restart: unless-stopped
+#     environment:
+#       - discovery.type=single-node
+#       - xpack.security.enabled=false
+#       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+#     volumes:
+#       - elasticsearch_data:/usr/share/elasticsearch/data
+#     ports:
+#       - "9200:9200"
+#     networks:
+#       - ai_insights_network
+
+#   # Kibana for Elasticsearch visualization
+#   kibana:
+#     image: docker.elastic.co/kibana/kibana:8.10.4
+#     container_name: ai_insights_kibana
+#     restart: unless-stopped
+#     environment:
+#       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+#     ports:
+#       - "5601:5601"
+#     networks:
+#       - ai_insights_network
+#     depends_on:
+#       - elasticsearch
+
+# =============================================================================
+# CONFIGURATION NOTES
+# =============================================================================
+#
+# Environment Variables:
+# ----------------------
+# Create a .env file in the root directory with your API keys:
+#
+# OPENAI_API_KEY=your_openai_api_key_here
+# ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# PERPLEXITY_API_KEY=your_perplexity_api_key_here
+# SENTRY_DSN=your_sentry_dsn_here (optional)
+#
+# Service URLs (Development):
+# ---------------------------
+# Frontend:           http://localhost:3000
+# Backend API:        http://localhost:8000
+# API Documentation:  http://localhost:8000/docs
+# Nginx Proxy:        http://localhost
+# 
+# Database Admin:     http://localhost:5050
+# Redis Admin:        http://localhost:8081
+# Prometheus:         http://localhost:9090
+# Grafana:            http://localhost:3001
+# Loki:               http://localhost:3100
+#
+# Database Connection (Direct):
+# ----------------------------
+# Host: localhost
+# Port: 5432
+# Database: ai_insights
+# Username: ai_insights_user
+# Password: ai_insights_password_dev
+#
+# Redis Connection (Direct):
+# -------------------------
+# Host: localhost
+# Port: 6379
+# Database: 0
+#
+# Development Commands:
+# --------------------
+# docker-compose up -d              # Start all services
+# docker-compose logs -f api        # View API logs
+# docker-compose exec api bash      # Access API container
+# docker-compose exec postgres psql -U ai_insights_user -d ai_insights
+# docker-compose restart api        # Restart API service
+# docker-compose down               # Stop all services
+# docker-compose down -v            # Stop and remove all data
+#
+# Production Notes:
+# ----------------
+# - Change all default passwords
+# - Use proper SSL certificates
+# - Configure external load balancer
+# - Set up proper backup strategies
+# - Use managed database services
+# - Configure proper monitoring and alerting
