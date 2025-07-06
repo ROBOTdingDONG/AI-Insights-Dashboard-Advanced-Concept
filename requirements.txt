@@ -1,0 +1,142 @@
+# AI Insights Dashboard - Backend Dependencies
+# Version: 1.0.0
+# Python: 3.11+
+
+# =============================================================================
+# CORE FRAMEWORK
+# =============================================================================
+fastapi==0.104.1                    # High-performance web framework
+uvicorn[standard]==0.24.0           # ASGI server with auto-reload
+gunicorn==21.2.0                    # WSGI server for production
+
+# =============================================================================
+# DATABASE & ORM
+# =============================================================================
+sqlalchemy==2.0.23                  # SQL toolkit and ORM
+alembic==1.12.1                     # Database migration tool
+psycopg2-binary==2.9.9              # PostgreSQL adapter
+asyncpg==0.29.0                     # Async PostgreSQL driver
+redis==5.0.1                        # In-memory data structure store
+
+# =============================================================================
+# LLM & AI INTEGRATION
+# =============================================================================
+openai==1.3.7                       # OpenAI API client
+langchain==0.0.335                  # LLM application framework
+langchain-openai==0.0.2             # OpenAI integration for LangChain
+tiktoken==0.5.1                     # OpenAI tokenizer
+anthropic==0.7.8                    # Claude API client
+
+# =============================================================================
+# EXTERNAL API CLIENTS
+# =============================================================================
+httpx==0.25.2                       # Modern HTTP client
+aiohttp==3.9.1                      # Async HTTP client/server
+requests==2.31.0                    # HTTP library for humans
+pydantic==2.5.0                     # Data validation using Python type annotations
+
+# =============================================================================
+# DATA PROCESSING & ANALYSIS
+# =============================================================================
+pandas==2.1.3                       # Data manipulation and analysis
+numpy==1.25.2                       # Numerical computing
+scipy==1.11.4                       # Scientific computing
+nltk==3.8.1                         # Natural language processing
+spacy==3.7.2                        # Advanced NLP
+textblob==0.17.1                    # Simple text processing
+beautifulsoup4==4.12.2              # HTML/XML parsing
+lxml==4.9.3                         # XML and HTML processing
+
+# =============================================================================
+# VISUALIZATION & EXPORT
+# =============================================================================
+plotly==5.17.0                      # Interactive visualization library
+kaleido==0.2.1                      # Static image export for Plotly
+matplotlib==3.8.2                   # Plotting library
+seaborn==0.13.0                     # Statistical data visualization
+fpdf2==2.7.6                        # PDF generation
+reportlab==4.0.7                    # Advanced PDF generation
+pillow==10.1.0                      # Image processing library
+
+# =============================================================================
+# AUTHENTICATION & SECURITY
+# =============================================================================
+python-jose[cryptography]==3.3.0    # JWT token handling
+passlib[bcrypt]==1.7.4              # Password hashing
+python-multipart==0.0.6             # Form data parsing
+cryptography==41.0.7                # Cryptographic primitives
+
+# =============================================================================
+# CONFIGURATION & ENVIRONMENT
+# =============================================================================
+python-dotenv==1.0.0                # Environment variable loading
+pydantic-settings==2.1.0            # Settings management
+click==8.1.7                        # Command line interface creation
+
+# =============================================================================
+# FILE PROCESSING & STORAGE
+# =============================================================================
+boto3==1.34.0                       # AWS SDK
+botocore==1.34.0                    # AWS SDK core
+python-magic==0.4.27                # File type detection
+openpyxl==3.1.2                     # Excel file processing
+PyPDF2==3.0.1                       # PDF processing
+
+# =============================================================================
+# ASYNC & CONCURRENCY
+# =============================================================================
+asyncio-mqtt==0.16.1                # MQTT client for async
+celery==5.3.4                       # Distributed task queue
+kombu==5.3.4                        # Messaging library
+
+# =============================================================================
+# MONITORING & LOGGING
+# =============================================================================
+structlog==23.2.0                   # Structured logging
+prometheus-client==0.19.0           # Metrics collection
+sentry-sdk==1.38.0                  # Error tracking
+
+# =============================================================================
+# DEVELOPMENT & TESTING
+# =============================================================================
+pytest==7.4.3                       # Testing framework
+pytest-asyncio==0.21.1              # Async testing support
+pytest-cov==4.1.0                   # Coverage reporting
+httpx-test==0.25.2                  # HTTP testing utilities
+factory-boy==3.3.0                  # Test data generation
+faker==20.1.0                       # Fake data generation
+
+# =============================================================================
+# CODE QUALITY & FORMATTING
+# =============================================================================
+black==23.11.0                      # Code formatting
+isort==5.12.0                       # Import sorting
+flake8==6.1.0                       # Linting
+mypy==1.7.1                         # Static type checking
+pre-commit==3.6.0                   # Git hooks
+
+# =============================================================================
+# PERFORMANCE & OPTIMIZATION
+# =============================================================================
+cachetools==5.3.2                   # Caching utilities
+joblib==1.3.2                       # Parallel processing
+psutil==5.9.6                       # System and process utilities
+
+# =============================================================================
+# TIME SERIES & ANALYTICS
+# =============================================================================
+pytz==2023.3                        # Timezone handling
+python-dateutil==2.8.2              # Date parsing
+arrow==1.3.0                        # Better date/time handling
+
+# =============================================================================
+# OPTIONAL: DEVELOPMENT UTILITIES
+# =============================================================================
+ipython==8.17.2                     # Enhanced interactive shell
+jupyter==1.0.0                      # Notebook environment
+rich==13.7.0                        # Rich text and formatting
+
+# =============================================================================
+# PRODUCTION DEPENDENCIES
+# =============================================================================
+supervisor==4.2.5                   # Process control system                                                
