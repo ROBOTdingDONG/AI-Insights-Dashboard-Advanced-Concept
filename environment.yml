@@ -1,0 +1,8 @@
+name: ai-insights-env
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - <your-python-packages>
